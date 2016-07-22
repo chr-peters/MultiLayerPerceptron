@@ -76,7 +76,7 @@ class Perceptron:
                             delta = self.derivativePerLayer[curLayer](self.weightedSums[h])*deltaSum
                         deltaValues[h]=delta    
                         self.weights[k][h] += learningRate * self.activation[k] * delta
-            if(plotBool):
+            if(plotBool):#TODO Compute actual output sum
                 plot+=[abs(output[x]-teachingInputs[i][x]) for x in range(len(output))]
         if(plotBool):
             plt.plot(plot)
