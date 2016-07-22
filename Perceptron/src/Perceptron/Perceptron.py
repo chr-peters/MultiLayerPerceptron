@@ -2,6 +2,7 @@ import math
 import random
 import matplotlib.pyplot as plt
 
+"""Multi Layer Perceptron"""
 class Perceptron:
     def __init__(self, neuronsPerLayer, actFunctPerLayer, derivativePerLayer):
         self.neuronsPerLayer = neuronsPerLayer
