@@ -2,6 +2,10 @@
 
 import numpy as np
 
+import matplotlib
+#matplotlib.use('Qt5Agg')
+import matplotlib.pyplot as plt
+
 class MultiLayerPerceptron:
 
     '''
@@ -18,10 +22,10 @@ class MultiLayerPerceptron:
         # the biases are represented as a list of vectors
         self.biases = []
 
-        # initialize weights and biases
+        # initialize weights and biases according to a standard normal distribution
         for layerNum in range(len(layers)-1):
-            self.weights.append(np.random.rand(layers[layerNum+1], layers[layerNum]))
-            self.biases.append(np.random.rand(layers[layerNum+1]))
+            self.weights.append(np.random.randn(layers[layerNum+1], layers[layerNum]))
+            self.biases.append(np.random.randn(layers[layerNum+1]))
 
         # initialize the activation function as the sigmoid function
         self.sigmoid = lambda x: 1./(1.+np.exp(-x))
@@ -38,9 +42,9 @@ class MultiLayerPerceptron:
     '''
     The feed-forward pass through the network
     '''
-    def getOutput(self, input):
+    def getOutput(self, netInput):
         # the current activation of the current layer
-        curActivation = input
+        curActivation = netInput
         # propagate the signal through the network
         for curBias, curWeight in zip(self.biases, self.weights):
             curActivation = self.sigmoid(np.dot(curWeight, curActivation) + curBias)
@@ -49,7 +53,10 @@ class MultiLayerPerceptron:
     '''
     Implementation of the stochastic gradient descent algorithm.
     '''
-    def stochasticGradientDescent(self, batchSize, numEpochs, learningRate, trainingData):
+    def stochasticGradientDescent(self, batchSize, numEpochs, learningRate, trainingData, costListeners=[]):
+        # count the iterations
+        iterations = 1
+        
         # iterate over the amount of epochs
         for curEpoch in range(numEpochs):
             # shuffle the training data
@@ -64,14 +71,28 @@ class MultiLayerPerceptron:
                 gradientWeights = [np.zeros(w.shape) for w in self.weights]
                 gradientBiases = [np.zeros(b.shape) for b in self.biases]
 
+                # the cost of the batch
+                batchCost = 0
+
                 # iterate over each example in the batch
-                for input, output in curBatch:
+                for netInput, output in curBatch:
+                    # calculate the cost
+                    if len(costListeners) > 0:
+                        batchCost += sum(self.cost(self.getOutput(netInput), output))
+                    
                     # get the gradients for a single example
-                    curGradientWeights, curGradientBiases = self.backpropagate(input, output)
+                    curGradientWeights, curGradientBiases = self.backpropagate(netInput, output)
 
                     # add them together
                     gradientWeights = [weight + curWeight for weight, curWeight in zip(gradientWeights, curGradientWeights)]
                     gradientBiases = [bias + curBias for bias, curBias in zip(gradientBiases, curGradientBiases)]
+
+                # average the batchCost
+                batchCost = batchCost / len(curBatch)
+
+                # print the cost to the listeners
+                for curListener in costListeners:
+                    curListener.putValues(iterations, batchCost)
 
                 # average the gradients
                 gradientWeights = [1./len(curBatch) * curWeight for curWeight in gradientWeights]
@@ -79,6 +100,8 @@ class MultiLayerPerceptron:
 
                 # update the network parameters by taking one step of gradient descent
                 self.updateParameters(gradientWeights, gradientBiases, learningRate)
+
+                iterations+=1
 
 
     '''
@@ -88,16 +111,16 @@ class MultiLayerPerceptron:
     representing the updates to each weight matrix and gradientBiases is a list of vectors
     representing the updates to each bias vector.
 
-    'input': the input signal the network receives
+    'netInput': the input signal the network receives
     'output': the desired output
     '''
-    def backpropagate(self, input, output):
+    def backpropagate(self, netInput, output):
         # initialize the matrices where the gradient will be stored
         gradientWeights = [np.zeros(curWeight.shape) for curWeight in self.weights]
         gradientBiases = [np.zeros(curBias.shape) for curBias in self.biases]
         
-        # compute the activations and inputs (denoted as z) for each layer
-        activations = [np.array(input)]
+        # compute the activations and netInputs (denoted as z) for each layer
+        activations = [np.array(netInput)]
         z = []
 
         # forward pass
@@ -137,21 +160,73 @@ class MultiLayerPerceptron:
         self.biases = [bias - learningRate * gradient for bias, gradient in zip(self.biases, gradientBiases)]
 
 '''
+This listener will print the current score to stdout in each iteration
+'''
+class StandardOutListener:
+    def putValues(self, iterations, cost):
+        print("Cost after {} iterations: {}".format(iterations, cost))
+
+'''
+This listener will create a real-time plot from the cost values
+'''
+class RealtimePlotListener:
+    def __init__(self):
+        self.iterationValues = []
+        self.costValues = []
+        plt.xlabel("Iterations")
+        plt.ylabel("Cost")
+        plt.title("Network Cost Function")
+
+    def putValues(self, iterations, cost):
+        self.iterationValues.append(iterations)
+        self.costValues.append(cost)
+        plt.plot(self.iterationValues, self.costValues)
+        plt.pause(0.00001)
+
+    def createPlot(self):
+        plt.show()
+
+'''
+This listener will a static plot from the cost values
+'''
+class PlotListener:
+    def __init__(self):
+        self.iterationValues = []
+        self.costValues = []
+
+    def putValues(self, iterations, cost):
+        self.iterationValues.append(iterations)
+        self.costValues.append(cost)
+
+    def createPlot(self):
+        plt.plot(self.iterationValues, self.costValues)
+        plt.xlabel("Iterations")
+        plt.ylabel("Cost")
+        plt.title("Network Cost Function")
+        plt.show()
+    
+'''
 The following code tests the network on the XOR-Problem
 '''
 if __name__ == "__main__":
-    network = MultiLayerPerceptron([2, 4, 2])
+    network = MultiLayerPerceptron([2, 10, 10, 2])
 
     # the XOR problem
     trainingData = [([0, 0], [1, 0]),
                      ([0, 1], [0, 1]),
                      ([1, 0], [0, 1]),
                      ([1, 1], [1, 0])]
+
+    # use this to generate a plot of the networks progress
+    pl = PlotListener()
+    
     # train the network
-    network.stochasticGradientDescent(4, 1000, 0.1, trainingData)
+    network.stochasticGradientDescent(4, 2000, 0.5, trainingData, costListeners=[StandardOutListener(), pl])
 
     # test the network
     for curExample in trainingData:
         prediction = network.getOutput(curExample[0])
-        print("Input: "+str(curExample[0])+", Prediction: "+str(prediction))
+        print("Input: "+str(curExample[0])+", Solution: "+str(curExample[1])+", Prediction: "+str(prediction))
+
+    pl.createPlot()
             
