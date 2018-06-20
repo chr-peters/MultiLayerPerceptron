@@ -11,6 +11,8 @@ class MultiLayerPerceptron:
     3 output neurons one would set layers = [2, 4, 3]
     '''
     def __init__(self, layers):
+        self.layers = layers
+
         # the weights of the network will be a list of weight matrices
         self.weights = []
         # the biases are represented as a list of vectors
@@ -26,6 +28,12 @@ class MultiLayerPerceptron:
 
         # also initialize its derivative
         self.sigmoidDerivative = lambda x: self.sigmoid(x) * (1. - self.sigmoid(x))
+
+        # initialize the cost-function for a concrete example
+        self.cost = lambda out, outTarget: 1./2 * (out-outTarget)**2
+
+        # the derivative of the cost-function for a concrete example
+        self.costDerivative = lambda out, outTarget: (out-outTarget)
 
     '''
     The feed-forward pass through the network
@@ -61,9 +69,13 @@ class MultiLayerPerceptron:
                     # get the gradients for a single example
                     curGradientWeights, curGradientBiases = self.backpropagate(input, output)
 
-                    # average them together
-                    gradientWeights = [weight + 1./len(curBatch) * curWeight for weight, curWeight in zip(gradientWeights, curGradientWeights)]
-                    gradientBiases = [bias + 1./len(curBatch) * curBias for bias, curBias in zip(gradientBiases, curGradientBiases)]
+                    # add them together
+                    gradientWeights = [weight + curWeight for weight, curWeight in zip(gradientWeights, curGradientWeights)]
+                    gradientBiases = [bias + curBias for bias, curBias in zip(gradientBiases, curGradientBiases)]
+
+                # average the gradients
+                gradientWeights = [1./len(curBatch) * curWeight for curWeight in gradientWeights]
+                gradientBiases = [1./len(curBatch) * curBias for curBias in gradientBiases]
 
                 # update the network parameters by taking one step of gradient descent
                 self.updateParameters(gradientWeights, gradientBiases, learningRate)
@@ -80,21 +92,49 @@ class MultiLayerPerceptron:
     'output': the desired output
     '''
     def backpropagate(self, input, output):
-        pass
+        # initialize the matrices where the gradient will be stored
+        gradientWeights = [np.zeros(curWeight.shape) for curWeight in self.weights]
+        gradientBiases = [np.zeros(curBias.shape) for curBias in self.biases]
+        
+        # compute the activations and inputs (denoted as z) for each layer
+        activations = [np.array(input)]
+        z = []
+
+        # forward pass
+        for curWeight, curBias in zip(self.weights, self.biases):
+            curZ = np.dot(curWeight, activations[-1]) + curBias
+            activations.append(self.sigmoid(curZ))
+            z.append(curZ)
+
+        # compute the delta of the output layer
+        delta = self.costDerivative(activations[-1], output)*self.sigmoidDerivative(z[-1])
+
+        # compute the weight and bias changes for the output layer
+        gradientWeights[-1] = np.outer(delta, activations[-2])
+        gradientBiases[-1] = delta
+
+        # propagate through the rest of the network
+        for curLayer in range(2, len(self.layers)):
+            # compute delta
+            delta = np.dot(self.weights[-curLayer+1].transpose(), delta) * self.sigmoidDerivative(z[-curLayer])
+
+            # update weight changes and biases
+            gradientWeights[-curLayer] = np.outer(delta, activations[-curLayer-1])
+            gradientBiases[-curLayer] = delta
+
+        return gradientWeights, gradientBiases
+        
 
     '''
     Updates the networks parameters when given the gradient as well as a learning rate by taking
     one step of gradient descent.
     '''
-    def updateParameters(self, gradientWeights, gradientBiases, learingRate):
+    def updateParameters(self, gradientWeights, gradientBiases, learningRate):
         # update the weight matrices
-        for curWeight, curWeightGradient in zip(self.weights, gradientWeights):
-            curWeight = curWeight - learningRate * curWeightGradient
+        self.weights = [weight - learningRate * gradient for weight, gradient in zip(self.weights, gradientWeights)]
 
         # update the biases
-        for curBias, curBiasGradient in zip(self.biases, gradientBiases):
-            curBias = curBias - learningRate * curBiasGradient
-            
+        self.biases = [bias - learningRate * gradient for bias, gradient in zip(self.biases, gradientBiases)]
 
 '''
 The following code tests the network on the XOR-Problem
@@ -108,7 +148,7 @@ if __name__ == "__main__":
                      ([1, 0], [0, 1]),
                      ([1, 1], [1, 0])]
     # train the network
-    network.stochasticGradientDescent(1, 1, 1, trainingData)
+    network.stochasticGradientDescent(4, 1000, 0.1, trainingData)
 
     # test the network
     for curExample in trainingData:
